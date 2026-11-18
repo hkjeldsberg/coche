@@ -11,6 +11,7 @@ export const SEARCH_PARAMS: [string, string][] = [
   ["variant", "1.818.2000437"],
   ["variant", "1.818.2000669"],
   ["fuel", "4"],
+  ["sales_form", "1"], // Bruktbil til salgs — excludes leasing (monthly price) and auctions
   ["year_from", "2024"],
   ["price_to", "700000"],
   ["mileage_to", "120000"],
