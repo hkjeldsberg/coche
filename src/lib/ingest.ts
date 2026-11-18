@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "./db";
 import { adUrl, fetchAdHtml, fetchAllSearchDocs } from "./finn";
+import { reverseGeocode } from "./geo";
 import {
   detectDrivetrain,
   detectFeatures,
@@ -21,6 +22,7 @@ export type IngestResult = {
   detailsFetched: number;
   detailErrors: number;
   detailsRemaining: number;
+  geocodeErrors: number;
 };
 
 type Existing = {
@@ -62,6 +64,8 @@ function baseRow(d: FinnSearchDoc) {
     price_nok: d.price?.amount ?? 0,
     dealer_name: d.organisation_name ?? null,
     location: d.location ?? null,
+    lat: d.coordinates?.lat ?? null,
+    lon: d.coordinates?.lon ?? null,
     thumbnail_url: d.image?.url ?? null,
     published_at: d.timestamp ? new Date(d.timestamp).toISOString() : null,
     last_seen_at: new Date().toISOString(),
@@ -162,6 +166,40 @@ async function fetchDetail(row: { id: string; external_id: string; title: string
   if (error) throw error;
 }
 
+/** Fill fylke/kommune for listings with coordinates but no fylke yet. */
+async function geocodePhase(deadline: number, concurrency = 5) {
+  const supa = db();
+  const { data, error } = await supa
+    .from("listings")
+    .select("id, lat, lon")
+    .eq("is_active", true)
+    .is("fylke", null)
+    .not("lat", "is", null)
+    .not("lon", "is", null);
+  if (error) throw error;
+  const queue = [...(data as { id: string; lat: number; lon: number }[])];
+  let errors = 0;
+  const worker = async () => {
+    while (queue.length && Date.now() < deadline) {
+      const row = queue.shift()!;
+      try {
+        const geo = await reverseGeocode(row.lat, row.lon);
+        // Empty string marks "looked up, not in Norway" so we don't retry forever.
+        const { error: uErr } = await supa
+          .from("listings")
+          .update({ fylke: geo?.fylke ?? "", kommune: geo?.kommune ?? "" })
+          .eq("id", row.id);
+        if (uErr) throw uErr;
+      } catch (e) {
+        errors++;
+        console.error(`geocode ${row.id} failed:`, e);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  return { geocodeErrors: errors };
+}
+
 async function detailPhase(deadline: number, concurrency = 5) {
   const supa = db();
   const { data, error } = await supa
@@ -200,6 +238,7 @@ export async function runIngest({ budgetMs = 240_000, skipSearch = false } = {})
   const search = skipSearch
     ? { searchTotal: 0, inserted: 0, priceChanges: 0, deactivated: 0 }
     : await searchPhase();
+  const geo = await geocodePhase(start + budgetMs);
   const detail = await detailPhase(start + budgetMs);
-  return { ...search, ...detail };
+  return { ...search, ...geo, ...detail };
 }

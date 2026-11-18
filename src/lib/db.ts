@@ -31,6 +31,10 @@ export type ListingRow = {
   omreg_fee_nok: number | null;
   dealer_name: string | null;
   location: string | null;
+  lat: number | null;
+  lon: number | null;
+  fylke: string | null;
+  kommune: string | null;
   thumbnail_url: string | null;
   published_at: string | null;
   found_features: string[];
@@ -46,6 +50,8 @@ export type PrefsRow = {
   max_mileage_km: number;
   min_wltp_km: number;
   drivetrain: "all" | "awd" | "rwd";
-  sort: "score" | "price" | "newest" | "drop";
+  sort: "score" | "price" | "newest" | "drop" | "distance";
   feature_levels: Record<string, string>;
+  max_distance_km: number;
+  fylker: string[];
 };

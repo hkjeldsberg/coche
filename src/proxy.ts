@@ -11,5 +11,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  // Public: login, Next assets, icons/manifest (needed before login for home-screen install).
+  matcher: ["/((?!login|_next/static|_next/image|favicon.ico|icon|apple-icon|manifest.webmanifest|.*\\.png$).*)"],
 };

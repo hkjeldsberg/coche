@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db, type PrefsRow } from "@/lib/db";
 import { resolveLevels } from "@/lib/features";
+import { DISTANCE_NO_LIMIT } from "@/lib/geo";
 import { SESSION_COOKIE, SESSION_TTL_MS, checkPassword, createSessionToken, verifySessionToken } from "@/lib/session";
 
 async function requireAuth() {
@@ -44,8 +45,10 @@ export async function savePrefs(p: PrefsRow) {
     max_mileage_km: clampInt(p.max_mileage_km, 0, 120_000, 50_000),
     min_wltp_km: clampInt(p.min_wltp_km, 0, 600, 500),
     drivetrain: (["all", "awd", "rwd"] as const).includes(p.drivetrain) ? p.drivetrain : "all",
-    sort: (["score", "price", "newest", "drop"] as const).includes(p.sort) ? p.sort : "score",
+    sort: (["score", "price", "newest", "drop", "distance"] as const).includes(p.sort) ? p.sort : "score",
     feature_levels: resolveLevels(p.feature_levels),
+    max_distance_km: clampInt(p.max_distance_km, 0, DISTANCE_NO_LIMIT, DISTANCE_NO_LIMIT),
+    fylker: Array.isArray(p.fylker) ? p.fylker.filter((f): f is string => typeof f === "string").slice(0, 30) : [],
     updated_at: new Date().toISOString(),
   };
   const { error } = await db().from("user_preferences").upsert(row);

@@ -19,7 +19,7 @@ function scoreClass(score: number) {
   return "bg-bad text-white";
 }
 
-export default function ListingCard({ listing: l, result }: { listing: ListingRow; result: ScoreResult }) {
+export default function ListingCard({ listing: l, result, distance }: { listing: ListingRow; result: ScoreResult; distance: number | null }) {
   const [flags, setFlags] = useOptimistic({ fav: l.is_favorite, hidden: l.is_hidden });
   const [, startTransition] = useTransition();
 
@@ -41,10 +41,10 @@ export default function ListingCard({ listing: l, result }: { listing: ListingRo
   return (
     <li className="overflow-hidden rounded-xl border border-line bg-panel">
       <div className="flex flex-col sm:flex-row">
-        <a href={l.url} target="_blank" rel="noopener noreferrer" className="relative block aspect-[4/3] w-full shrink-0 bg-soft-bg sm:w-56">
+        <a href={l.url} target="_blank" rel="noopener noreferrer" className="relative block aspect-[16/9] w-full shrink-0 bg-soft-bg sm:aspect-[4/3] sm:w-56">
           {l.thumbnail_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={l.thumbnail_url} alt={l.title} loading="lazy" className="h-full w-full object-cover" />
+            <img src={l.thumbnail_url} alt={l.title} loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
           )}
           <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-sm font-semibold tabular-nums ${scoreClass(result.score)}`}>
             {result.score}% match
@@ -76,12 +76,18 @@ export default function ListingCard({ listing: l, result }: { listing: ListingRo
                   {trim ?? "Utstyrsnivå ukjent"}
                   {l.is_black_edition ? " · Black Edition" : ""}
                 </Pill>
-                {l.location && <Pill>{l.location}</Pill>}
+                {(l.location || distance != null) && (
+                  <Pill>
+                    {l.location ?? l.kommune}
+                    {l.fylke ? `, ${l.fylke}` : ""}
+                    {distance != null ? ` · ${distance} km fra Oslo` : ""}
+                  </Pill>
+                )}
               </div>
             </div>
 
             {/* Price block */}
-            <div className="text-right">
+            <div className="sm:text-right">
               <div className="text-xl font-semibold tabular-nums">{nok(l.price_nok)}</div>
               {l.omreg_fee_nok != null && <div className="text-xs text-muted">inkl. omreg. {nok(l.omreg_fee_nok)}</div>}
               {drop > 0 && <div className="mt-1 inline-block rounded-full bg-good-bg px-2 py-0.5 text-xs font-medium text-good">−{nok(drop)}</div>}

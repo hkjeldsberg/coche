@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ListingRow, PrefsRow } from "@/lib/db";
 import { FEATURES, LEVEL_LABEL, type Level } from "@/lib/features";
 import { scoreListing } from "@/lib/score";
+import { DISTANCE_NO_LIMIT, distanceFromOslo } from "@/lib/geo";
 import { logout, savePrefs } from "@/app/actions";
 import ListingCard from "./ListingCard";
 
@@ -18,6 +19,7 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
   const [prefs, setPrefs] = useState(initialPrefs);
   const [view, setView] = useState<View>("all");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Persist prefs (debounced) whenever they change after mount.
   const first = useRef(true);
@@ -38,12 +40,14 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
       listings.map((l) => ({
         listing: l,
         result: scoreListing(l.found_features ?? [], l.trim_level, l.drivetrain, levels),
+        distance: distanceFromOslo(l.lat, l.lon),
       })),
     [listings, levels],
   );
 
   const visible = useMemo(() => {
-    const out = scored.filter(({ listing: l, result }) => {
+    const fylkeSet = new Set(prefs.fylker);
+    const out = scored.filter(({ listing: l, result, distance }) => {
       if (view === "hidden") return l.is_hidden;
       if (l.is_hidden) return false;
       if (view === "favorites" && !l.is_favorite) return false;
@@ -53,6 +57,8 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
       if (l.wltp_range_km == null && l.range_variant === "standard") return false;
       if (prefs.drivetrain === "awd" && l.drivetrain !== "AWD") return false;
       if (prefs.drivetrain === "rwd" && l.drivetrain !== "RWD") return false;
+      if (prefs.max_distance_km < DISTANCE_NO_LIMIT && distance != null && distance > prefs.max_distance_km) return false;
+      if (fylkeSet.size && !fylkeSet.has(l.fylke ?? "")) return false;
       if (result.failsMustHave) return false;
       return true;
     });
@@ -63,9 +69,20 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
       price: (a, b) => a.listing.price_nok - b.listing.price_nok,
       newest: (a, b) => ts(b.listing) - ts(a.listing),
       drop: (a, b) => drop(b.listing) - drop(a.listing) || b.result.score - a.result.score,
+      distance: (a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || b.result.score - a.result.score,
     };
     return out.sort(cmp[prefs.sort]);
   }, [scored, prefs, view]);
+
+  // Fylker present in the data, most listings first.
+  const fylkeCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of listings) if (l.fylke) m.set(l.fylke, (m.get(l.fylke) ?? 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }, [listings]);
+  const toggleFylke = (f: string) =>
+    set("fylker", prefs.fylker.includes(f) ? prefs.fylker.filter((x) => x !== f) : [...prefs.fylker, f]);
+  const distanceLabel = prefs.max_distance_km >= DISTANCE_NO_LIMIT ? "Alle" : km(prefs.max_distance_km);
 
   const hiddenCount = listings.filter((l) => l.is_hidden).length;
   const favCount = listings.filter((l) => l.is_favorite && !l.is_hidden).length;
@@ -86,11 +103,26 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
       </header>
 
       {/* Top control bar */}
-      <section className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-bg/95 px-4 py-3 backdrop-blur">
-        <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
+      <section className="sticky top-0 z-10 -mx-4 mb-4 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur sm:py-3">
+        {/* Mobile: compact summary; full controls behind a toggle so cards get the screen */}
+        <button
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+          className="flex w-full items-center justify-between gap-2 py-1 text-left text-sm sm:hidden"
+        >
+          <span className="truncate text-muted">
+            ≤{Math.round(prefs.max_price_nok / 1000)}k kr · ≤{Math.round(prefs.max_mileage_km / 1000)}k km · ≥{prefs.min_wltp_km} km
+            {prefs.drivetrain !== "all" ? ` · ${prefs.drivetrain.toUpperCase()}` : ""}
+            {prefs.max_distance_km < DISTANCE_NO_LIMIT ? ` · ≤${prefs.max_distance_km} km fra Oslo` : ""}
+            {prefs.fylker.length ? ` · ${prefs.fylker.length} fylke${prefs.fylker.length > 1 ? "r" : ""}` : ""}
+          </span>
+          <span className="shrink-0 rounded-lg border border-line bg-panel px-3 py-1 font-medium">Filter {filtersOpen ? "▴" : "▾"}</span>
+        </button>
+        <div className={`${filtersOpen ? "grid" : "hidden"} gap-x-6 gap-y-3 pb-2 pt-2 sm:grid sm:grid-cols-2 sm:pb-0 sm:pt-0 lg:grid-cols-4 xl:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]`}>
           <Slider label="Maks pris" value={prefs.max_price_nok} display={nok(prefs.max_price_nok)} min={350_000} max={700_000} step={10_000} onChange={(v) => set("max_price_nok", v)} />
           <Slider label="Maks km" value={prefs.max_mileage_km} display={km(prefs.max_mileage_km)} min={0} max={120_000} step={5_000} onChange={(v) => set("max_mileage_km", v)} />
           <Slider label="Min WLTP" value={prefs.min_wltp_km} display={km(prefs.min_wltp_km)} min={400} max={600} step={10} onChange={(v) => set("min_wltp_km", v)} />
+          <Slider label="Maks avstand fra Oslo" value={prefs.max_distance_km} display={distanceLabel} min={25} max={DISTANCE_NO_LIMIT} step={25} onChange={(v) => set("max_distance_km", v)} />
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-muted">Drivlinje</span>
             <select value={prefs.drivetrain} onChange={(e) => set("drivetrain", e.target.value as PrefsRow["drivetrain"])} className="rounded-lg border border-line bg-panel px-2 py-1.5">
@@ -106,6 +138,7 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
               <option value="price">Lavest pris</option>
               <option value="newest">Nyeste annonse</option>
               <option value="drop">Størst prisfall</option>
+              <option value="distance">Nærmest Oslo</option>
             </select>
           </label>
         </div>
@@ -115,9 +148,35 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
         {/* Feature drawer */}
         <aside className="lg:sticky lg:top-28 lg:self-start">
           <button onClick={() => setDrawerOpen((o) => !o)} className="mb-2 w-full rounded-lg border border-line bg-panel px-3 py-2 text-left text-sm font-medium lg:hidden">
-            Utstyr og vekting {drawerOpen ? "▴" : "▾"}
+            Fylker og utstyr {drawerOpen ? "▴" : "▾"}
           </button>
           <div className={`${drawerOpen ? "block" : "hidden"} space-y-3 rounded-xl border border-line bg-panel p-3 lg:block`}>
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold">Fylker</h2>
+              {prefs.fylker.length > 0 && (
+                <button onClick={() => set("fylker", [])} className="text-xs text-accent hover:underline">
+                  Nullstill
+                </button>
+              )}
+            </div>
+            {fylkeCounts.length === 0 ? (
+              <p className="text-xs text-muted">Fylke hentes ved neste «Hent fra Finn».</p>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {fylkeCounts.map(([f, n]) => (
+                  <button
+                    key={f}
+                    onClick={() => toggleFylke(f)}
+                    aria-pressed={prefs.fylker.includes(f)}
+                    className={`rounded-full px-2 py-0.5 text-xs transition ${prefs.fylker.includes(f) ? "bg-accent text-white" : "bg-soft-bg text-muted hover:text-ink"}`}
+                  >
+                    {f} <span className="opacity-70">{n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted">{prefs.fylker.length ? "Viser kun valgte fylker." : "Ingen valgt = alle fylker."}</p>
+            <hr className="border-line" />
             <h2 className="text-sm font-semibold">Utstyr og vekting</h2>
             {FEATURES.map((f) => (
               <div key={f.key}>
@@ -169,8 +228,8 @@ export default function Dashboard({ listings, initialPrefs }: { listings: Listin
             </p>
           ) : (
             <ul className="grid gap-3">
-              {visible.map(({ listing, result }) => (
-                <ListingCard key={listing.id} listing={listing} result={result} />
+              {visible.map(({ listing, result, distance }) => (
+                <ListingCard key={listing.id} listing={listing} result={result} distance={distance} />
               ))}
             </ul>
           )}
@@ -227,7 +286,7 @@ function ScrapeButton() {
 
   return (
     <div className="flex items-center gap-3">
-      {status && <span className="hidden max-w-md text-right text-xs text-muted sm:block">{status}</span>}
+      {status && <span className="max-w-[45vw] text-right text-xs text-muted sm:max-w-md">{status}</span>}
       <button onClick={run} disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">
         {busy ? "Henter…" : "Hent fra Finn"}
       </button>

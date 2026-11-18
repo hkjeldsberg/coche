@@ -18,6 +18,7 @@ export type FinnSearchDoc = {
   driving_range?: number;
   chassis_number?: string;
   regno?: string;
+  coordinates?: { lat?: number; lon?: number };
 };
 
 export type Detail = {

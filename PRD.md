@@ -21,6 +21,7 @@
 * **Sold detection:** Ad not present in a completed search → `is_active = false`.
 * **Auth:** single password from `APP_PASSWORD`, HMAC-signed cookie (`SESSION_SECRET`), enforced in `src/proxy.ts`.
 * **No notifications.**
+* **Location filter:** straight-line distance from Oslo (Finn coordinates) + fylke multi-select (Kartverket `kommuneinfo/v1/punkt`). Unknown coordinates pass the distance filter.
 * Schema in `supabase/migrations/001_coche.sql` supersedes §5.
 
 #### 2. Hard Search Constraints (2024+ Facelift Baseline)

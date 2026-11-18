@@ -9,7 +9,11 @@
 - [x] Auth: password + HMAC cookie, `src/proxy.ts`
 - [x] Dashboard: sliders, drivetrain, sort, weight drawer, cards, missing strip, favorite/hide, scrape button
 - [x] Tests (16) green, build green, live parser check on 7 real ads
-- [ ] **User:** run migration SQL + expose `coche` schema in Supabase
+- [x] **User:** run migration SQL + expose `coche` schema in Supabase
+- [x] Mobile pass: collapsible filter bar, 16:9 card images, status visible (verified via 390px screenshots)
+- [x] Favicon (`src/app/icon.svg`), apple-icon, PWA manifest + 192/512/maskable icons
+- [x] Distance-from-Oslo slider + fylke filter + "Nærmest Oslo" sort (Kartverket reverse geocode)
+- [ ] **User:** run `supabase/migrations/002_location.sql`, then «Hent fra Finn» to backfill coords/fylke
 - [ ] First real ingest + UI check in browser
 - [ ] Verify `TRIM_STANDARD` against Volvo NO equipment lists
 - [ ] Deploy to Vercel (env: APP_PASSWORD, SESSION_SECRET, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
